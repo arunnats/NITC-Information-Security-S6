@@ -9,7 +9,7 @@ struct Transaction {
     from: char,
     to: char,
     amount: i32,
-    extra_data: i32,
+    temp: i32,
 }
 
 // block struct to represenmt a blocks in the blockchain
@@ -186,7 +186,7 @@ fn main() {
             from: parts[0].chars().next().unwrap(),
             to: parts[1].chars().next().unwrap(),
             amount: parts[2].parse().unwrap(),
-            extra_data: parts[3].parse().unwrap(),
+            temp: parts[3].parse().unwrap(),
         };
         
         all_transactions.push(transaction);
@@ -226,10 +226,10 @@ fn main() {
         println!("{}", block.block_number);
         println!("{}", block.block_hash);
         
-        // format transactions for output
+        // ormat transactions for output
         let txns_str: Vec<String> = block.transactions
             .iter()
-            .map(|t: &Transaction| format!("['{}', '{}', {}, {}]", t.from, t.to, t.amount, t.extra_data))
+            .map(|t: &Transaction| format!("['{}', '{}', {}, {}]", t.from, t.to, t.amount, t.temp))
             .collect();
         
         println!("[{}]", txns_str.join(", "));
