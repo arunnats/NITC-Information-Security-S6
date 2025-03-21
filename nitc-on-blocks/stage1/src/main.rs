@@ -155,12 +155,15 @@ fn execute_transaction(transaction: &Transaction, balances: &mut HashMap<char, i
         false // transaction failed - insufficient funds
     }
 }
+
 fn main() {
     let stdin: io::Stdin = io::stdin();
     let mut lines: io::Lines<io::StdinLock<'_>> = stdin.lock().lines();
 
+    // read number of accounts
     let num_accounts: i32 = lines.next().unwrap().unwrap().trim().parse().unwrap();
 
+    // read account balances
     let mut balances: HashMap<char, i32> = HashMap::new();
     for _ in 0..num_accounts {
         let line: String = lines.next().unwrap().unwrap();
@@ -170,8 +173,10 @@ fn main() {
         balances.insert(account, balance);
     }
 
+    // read number of transactions
     let num_transactions: i32 = lines.next().unwrap().unwrap().trim().parse().unwrap();
 
+    // read all transactions
     let mut all_transactions: Vec<Transaction> = Vec::new();
     for _ in 0..num_transactions {
         let line: String = lines.next().unwrap().unwrap();
@@ -187,16 +192,19 @@ fn main() {
         all_transactions.push(transaction);
     }
 
+    // process transactions and create blocks
     let mut blocks: Vec<Block> = Vec::new();
     let mut block_number: i32 = 1;
-    let mut prev_block_hash: String = String::from("0");
+    let mut prev_block_hash: String = String::from("0"); // genesis block starts with "0"
     let mut current_block_txns: Vec<Transaction> = Vec::new();
     
+    // process each transaction
     for txn in all_transactions {
         if execute_transaction(&txn, &mut balances) {
+            // if transaction is successful, add it to current block
             current_block_txns.push(txn);
             
-            // Create a new block when we have 3 transactions or it's the last transaction
+            // create a new block when we have 3 transactions or it's the last transaction
             if current_block_txns.len() == 3 {
                 let block = create_block(block_number, &prev_block_hash, current_block_txns);
                 prev_block_hash = block.block_hash.clone();
@@ -207,17 +215,18 @@ fn main() {
         }
     }
 
+    // create final block with any remaining transactions
     if !current_block_txns.is_empty() {
         let block: Block = create_block(block_number, &prev_block_hash, current_block_txns);
         blocks.push(block);
     }
     
-    // Print the output
+    // print the output
     for block in blocks {
         println!("{}", block.block_number);
         println!("{}", block.block_hash);
         
-        // Format transactions for output
+        // format transactions for output
         let txns_str: Vec<String> = block.transactions
             .iter()
             .map(|t: &Transaction| format!("['{}', '{}', {}, {}]", t.from, t.to, t.amount, t.extra_data))
