@@ -1,0 +1,8 @@
+[package]
+name = "modification"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+sha3 = "0.10.0"
+hex = "0.4.3"

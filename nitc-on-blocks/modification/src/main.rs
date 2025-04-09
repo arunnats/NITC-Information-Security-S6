@@ -1,48 +1,49 @@
+// Import necessary libraries
 use std::collections::HashMap;
 use std::io::{self, BufRead};
 use sha3::{Digest, Sha3_256};
 use hex;
 
-// miner structure
+// Define the Miner struct to represent a miner in the blockchain
 #[derive(Debug, Clone)]
 struct Miner {
-    id: String,
-    computation_score: i32,
-    block_hash_score_array: Vec<i32>,
+    id: char,                           // Unique identifier for the miner
+    computation_score: i32,             // Miner's computational power
+    block_hash_score_array: Vec<i32>,   // Array of block hash scores for different block numbers
 }
 
-// transcation struct to represenmt a blockchain transaction
+// Define the Transaction struct to represent a transaction in the blockchain
 #[derive(Debug, Clone)]
 struct Transaction {
-    from: char,
-    to: char,
-    amount: i32,
-    incentive: i32,
+    from: char,    // Sender's account
+    to: char,      // Receiver's account
+    amount: i32,   // Amount to be transferred
+    incentive: i32, // Transaction fee or incentive
 }
 
-// block struct to represenmt a blocks in the blockchain
+// Define the Block struct to represent a block in the blockchain
 #[derive(Debug)]
 struct Block {
-    block_number: i32,
-    merkle_root: String,
-    block_hash: String,
-    transactions: Vec<Transaction>,
-    nonce: i32,
-    miner_id: String
+    block_number: i32,      // Unique number for the block
+    merkle_root: String,    // Root hash of the Merkle tree of transactions
+    block_hash: String,     // Hash of the entire block
+    transactions: Vec<Transaction>, // List of transactions in the block
+    nonce: i32,             // Nonce used for Proof of Work
+    miner_id: char          // ID of the miner who mined this block
 }
 
-// block MerkleNode struct for building the merkle tree
+// Define the MerkleNode struct to represent a node in the Merkle tree
 #[derive(Debug, Clone)]
 struct MerkleNode {
-    hash: String, // hash value of string
-    left: Option<Box<MerkleNode>>, // optional left node
-    right: Option<Box<MerkleNode>>, // optional rightt node
+    hash: String,                   // Hash of this node
+    left: Option<Box<MerkleNode>>,  // Left child node
+    right: Option<Box<MerkleNode>>, // Right child node
 }
 
+// Implement methods for MerkleNode
 impl MerkleNode {
-    // new leaf node function -> take the transaction as input and store its hash (from+to+amount)
+    // Create a new leaf node from a transaction
     fn new_leaf(transaction: &Transaction) -> MerkleNode {
-        // hash format: sender + incentive + receiver + amount
         let hash_input: String = format!("{}{}{}{}", 
             transaction.from, 
             transaction.incentive, 
@@ -58,75 +59,57 @@ impl MerkleNode {
         }
     }
 
-    // mew merkle node function -> take the two children (right child need not be present) as inpur and create the node
-    fn new_node(left: MerkleNode, right: Option<MerkleNode>) -> MerkleNode {
-
-        // hash is combined hash of the childen or 
-        let hash: String = match &right {
-            Some(right_node) => {
-                // Two children
-                let combined: String = format!("{}{}", left.hash, right_node.hash);
-                calculate_hash(combined.as_bytes())
-            },
-            None => {
-                // single child -> we try to build the tree left skewed
-                left.hash.clone()
-            }
-        };
+    // Create a new internal node from two child nodes
+    fn new_node(left: MerkleNode, right: MerkleNode) -> MerkleNode {
+        let combined: String = format!("{}{}", left.hash, right.hash);
+        let hash: String = calculate_hash(combined.as_bytes());
 
         MerkleNode { 
             hash: hash, 
-            left: Some(Box::new(left)), // store left child
-            right: (right.map(Box::new)) // store right child if exits
+            left: Some(Box::new(left)),
+            right: Some(Box::new(right)),
         }
     }
 }
 
-// create a Sha3_256 hasher and hash the data input to it, return the final hex as a string
+// Function to calculate SHA3-256 hash of given data
 pub fn calculate_hash(data: &[u8]) -> String {
     let mut hasher = Sha3_256::new();
-    hasher.update(data); // add data to the hasher
-    hex::encode(hasher.finalize()) // get final hash and convert to hex string
+    hasher.update(data);
+    hex::encode(hasher.finalize())
 }
 
-// build the merkle tree from list of transactions
+// Function to build a Merkle tree from a list of transactions
 fn build_merkle_tree(transactions: &[Transaction]) -> Option<MerkleNode> {
     if transactions.is_empty() {
         return None;
     }
 
-    // get final hash and convert to hex string
+    // Create leaf nodes for all transactions
     let mut nodes: Vec<MerkleNode> = transactions
     .iter()
     .map(|txn| MerkleNode::new_leaf(txn))
     .collect();
 
-    // iteratively build the tree by combining nodes at each level
-    // continue until we have just one node (the root)
+    // Build the tree bottom-up
     while nodes.len() > 1 {
         let mut new_level: Vec<MerkleNode> = Vec::new();
 
-        // process nodes in pairs
         for chunk in nodes.chunks(2) {
-            // if we have a pair, create a node with two children
             if chunk.len() == 2 {
-                new_level.push(MerkleNode::new_node(chunk[0].clone(), Some(chunk[1].clone())));
+                new_level.push(MerkleNode::new_node(chunk[0].clone(), chunk[1].clone()));
             } else {
-                // if we have a single node left, create a node with one child
-                new_level.push(MerkleNode::new_node(chunk[0].clone(), None));
+                 new_level.push(MerkleNode::new_node(chunk[0].clone(), chunk[0].clone()));
             }
         }
 
-        // replace current level with the new level for next iteration
         nodes = new_level;
     }
 
-    // return the root
     Some(nodes.remove(0))
 }
 
-// get the merkle root hash from a list of transactions
-// returns "0" for empty transaction list
+// Function to get the Merkle root hash from a list of transactions
 fn get_merkle_root(transactions: &[Transaction]) -> String {
     match build_merkle_tree(transactions) {
         Some(root) => root.hash,
@@ -134,22 +117,18 @@ fn get_merkle_root(transactions: &[Transaction]) -> String {
     }
 }
 
-// create new block with the given transactions and previous block information
+// Function to create a new block
 fn create_block(block_number: i32, prev_block_hash: &str, transactions: Vec<Transaction>, miners: &[Miner]) -> Block {
-    // calculate the merkle root from transactions
     let merkle_root: String = get_merkle_root(&transactions);
-    
-    // create the block hash by combining previous hash, block number, and merkle root
     let hash_input: String = format!("{}{}{}", prev_block_hash, block_number, merkle_root);
     let block_hash: String = calculate_hash(hash_input.as_bytes());
-    
-    // find the minimum nonce that satisfies the PoW condition
     let mut nonce = 0;
+
+    // Perform Proof of Work
     loop {
         let pow_input = format!("{}{}", block_hash, nonce);
         let computed_hash = calculate_hash(pow_input.as_bytes());
-        
-        // check if the last digit of the computed hash is '0'
+
         if computed_hash.chars().last().unwrap() == '0' {
             break;
         }
@@ -157,10 +136,10 @@ fn create_block(block_number: i32, prev_block_hash: &str, transactions: Vec<Tran
         nonce += 1;
     }
 
-    // select the miner with the highest block sealing score
-    let block_index = (block_number % 8) as usize;
-    let mut max_score = -1;
-    let mut selected_miner = String::new();
+    // Select the miner for this block
+    let block_index: usize = (block_number % 8) as usize;
+    let mut max_score: i32 = -1;
+    let mut selected_miner: char = ' ';
 
     for miner in miners {
         let block_hash_score = miner.block_hash_score_array[block_index];
@@ -168,11 +147,10 @@ fn create_block(block_number: i32, prev_block_hash: &str, transactions: Vec<Tran
         
         if block_sealing_score > max_score {
             max_score = block_sealing_score;
-            selected_miner = miner.id.clone();
+            selected_miner = miner.id;
         }
     }
 
-    // create and return the new block
     Block {
         block_number,
         merkle_root,
@@ -183,34 +161,28 @@ fn create_block(block_number: i32, prev_block_hash: &str, transactions: Vec<Tran
     }
 }
 
-// execute a transaction by updating account balances
-// returns true if transaction was successful, false if sender has insufficient funds
+// Function to execute a transaction
 fn execute_transaction(transaction: &Transaction, balances: &mut HashMap<char, i32>) -> bool {
-    // get sender's balance (default to 0 if account doesn't exist)
     let from_balance: i32 = *balances.get(&transaction.from).unwrap_or(&0);
     
-    // check if sufficient balance -> execute the transaction
     if from_balance >= transaction.amount {
-        // Update sender's balance
         *balances.entry(transaction.from).or_insert(0) -= transaction.amount;
-        
-        // Update receiver's balance
         *balances.entry(transaction.to).or_insert(0) += transaction.amount;
-        
         true
     } else {
-        false // transaction failed - insufficient funds
+        false
     }
 }
 
+// Main function
 fn main() {
     let stdin: io::Stdin = io::stdin();
     let mut lines: io::Lines<io::StdinLock<'_>> = stdin.lock().lines();
 
-    // read number of accounts
+    // Read number of accounts
     let num_accounts: i32 = lines.next().unwrap().unwrap().trim().parse().unwrap();
 
-    // read account balances
+    // Read account balances
     let mut balances: HashMap<char, i32> = HashMap::new();
     for _ in 0..num_accounts {
         let line: String = lines.next().unwrap().unwrap();
@@ -220,10 +192,10 @@ fn main() {
         balances.insert(account, balance);
     }
 
-    // read number of transactions
+    // Read number of transactions
     let num_transactions: i32 = lines.next().unwrap().unwrap().trim().parse().unwrap();
 
-    // read all transactions
+    // Read transactions
     let mut all_transactions: Vec<Transaction> = Vec::new();
     for _ in 0..num_transactions {
         let line: String = lines.next().unwrap().unwrap();
@@ -231,28 +203,31 @@ fn main() {
         
         let transaction: Transaction = Transaction {
             from: parts[0].chars().next().unwrap(),
-            to: parts[1].chars().next().unwrap(),
-            amount: parts[2].parse().unwrap(),
-            incentive: parts[3].parse().unwrap(),
+            to: parts[2].chars().next().unwrap(),
+            amount: parts[3].parse().unwrap(),
+            incentive: parts[1].parse().unwrap(),
         };
         
         all_transactions.push(transaction);
     }
 
-     // read number of miners
-     let num_miners: i32 = lines.next().unwrap().unwrap().trim().parse().unwrap();
+    // Read block reward
+    let block_reward: i32 = lines.next().unwrap().unwrap().trim().parse().unwrap();
 
-     // read miner information
+    // Read number of miners
+    let num_miners: i32 = lines.next().unwrap().unwrap().trim().parse().unwrap();
+
+    // Read miner information
     let mut miners: Vec<Miner> = Vec::new();
     for _ in 0..num_miners {
         let line: String = lines.next().unwrap().unwrap();
         let parts: Vec<&str> = line.split_whitespace().collect();
         
-        let id: String = parts[0].to_string();
+        let id: char = parts[0].chars().next().unwrap();
         let computation_score: i32 = parts[1].parse().unwrap();
         
         let mut block_hash_score_array: Vec<i32> = Vec::new();
-        for i in 2..10 {  // 8 values for block_hash_score_array
+        for i in 2..10 {
             block_hash_score_array.push(parts[i].parse().unwrap());
         }
         
@@ -263,34 +238,31 @@ fn main() {
         });
     }
 
-    // sort transactions by incentive (descending), then receiver (ascending)
-    all_transactions.sort_by(|a: &Transaction, b: &Transaction| {
-        // first compare incentives (descending)
-        let incentive_cmp = b.incentive.cmp(&a.incentive);
+    // For some stupid reason we arent sorting it anymore
+    // Sort transactions by incentive (descending) and receiver (ascending)
+    // all_transactions.sort_by(|a: &Transaction, b: &Transaction| {
+    //     let incentive_cmp = b.incentive.cmp(&a.incentive);
         
-        if incentive_cmp == std::cmp::Ordering::Equal {
-            // if incentives are equal, compare receivers (ascending)
-            a.to.cmp(&b.to)
-        } else {
-            incentive_cmp
-        }
-    });
+    //     if incentive_cmp == std::cmp::Ordering::Equal {
+    //         a.to.cmp(&b.to)
+    //     } else {
+    //         incentive_cmp
+    //     }
+    // });
 
-    // process transactions and create blocks
+    // Process transactions and create blocks
     let mut blocks: Vec<Block> = Vec::new();
     let mut block_number: i32 = 1;
-    let mut prev_block_hash: String = String::from("0"); // genesis block starts with "0"
+    let mut prev_block_hash: String = String::from("0");
     let mut current_block_txns: Vec<Transaction> = Vec::new();
     
-    // process each transaction
     for txn in all_transactions {
         if execute_transaction(&txn, &mut balances) {
-            // if transaction is successful, add it to current block
             current_block_txns.push(txn);
             
-            // create a new block when we have 4 transactions or it's the last transaction
-            if current_block_txns.len() == 4 {
+            if current_block_txns.len() == 10 {
                 let block = create_block(block_number, &prev_block_hash, current_block_txns, &miners);
+                *balances.entry(block.miner_id).or_insert(0) += block_reward;
                 prev_block_hash = block.block_hash.clone();
                 blocks.push(block);
                 block_number += 1;
@@ -299,21 +271,21 @@ fn main() {
         }
     }
 
-    // create final block with any remaining transactions
+    // Create final block if there are remaining transactions
     if !current_block_txns.is_empty() {
         let block: Block = create_block(block_number, &prev_block_hash, current_block_txns, &miners);
+        *balances.entry(block.miner_id).or_insert(0) += block_reward;
         blocks.push(block);
     }
     
-    // print the output
+    // Print the results
     for block in blocks {
         println!("{}", block.block_number);
         println!("{}", block.block_hash);
         
-        // format transactions for output
         let txns_str: Vec<String> = block.transactions
             .iter()
-            .map(|t: &Transaction| format!("['{}', '{}', {}, {}]", t.from, t.to, t.amount, t.incentive))
+            .map(|t: &Transaction| format!("['{}', '{}', {}, {}]", t.from, t.amount, t.to, t.incentive))
             .collect();
         
         println!("[{}]", txns_str.join(", "));

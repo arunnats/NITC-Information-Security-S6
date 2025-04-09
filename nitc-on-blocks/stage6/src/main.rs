@@ -11,7 +11,6 @@ struct Miner {
     block_hash_score_array: Vec<i32>,
 }
 
-
 // transcation struct to represenmt a blockchain transaction
 #[derive(Debug, Clone)]
 struct Transaction {
