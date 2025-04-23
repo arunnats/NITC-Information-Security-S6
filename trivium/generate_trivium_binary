@@ -41,3 +41,9 @@ if __name__ == "__main__":
     with ProcessPoolExecutor() as executor:
         results = list(executor.map(generate_sequence, range(num_sequences)))
     print(f"Finished generating {len(results)} sequences.")
+
+    # Concatenate all sequences into one file
+    # with open('data/trivium_all_sequences.bin', 'wb') as outfile:
+    #     for i in range(num_sequences):
+    #         with open(f'data/trivium_keystream_{i}.bin', 'rb') as infile:
+    #             outfile.write(infile.read())
